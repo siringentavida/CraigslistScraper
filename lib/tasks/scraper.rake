@@ -1,5 +1,5 @@
 namespace :scraper do
-  desc "TODO"
+  desc "Fetch Craigslist posts from 3taps"
   task scrape: :environment do
     require 'open-uri'
     require 'json'
@@ -22,14 +22,14 @@ namespace :scraper do
  
     result = JSON.parse(open(uri).read)
  
-    #puts JSON.pretty_generate result["postings"]
+    #puts JSON.pretty_generate result["postings"].first["images"]
     
     result["postings"].each do |posting|
       @post = Post.new
       @post.heading = posting["heading"]
       @post.body = posting["body"]
       @post.price = posting["price"]
-      @post.neighborhood = posting["location"]["locality"]
+      @post.neighborhood = Location.find_by(code: posting["location"]["locality"]).try(:name)
       @post.external_url = posting["external_url"]
       @post.timestamp = posting["timestamp"]
       @post.bedrooms = posting["annotations"]["bedrooms"] if posting["annotations"]["bedrooms"].present?
@@ -41,6 +41,14 @@ namespace :scraper do
       @post.street_parking = posting["annotations"]["street_parking"] if posting["annotations"]["street_parking"].present?
       
       @post.save
+      
+      #loop over images and save to db
+      posting["images"].each do |image|
+        @image = Image.new
+        @image.url = image["full"]
+        @image.post_id = @post.id
+        @image.save
+      end
     end
     
   end
@@ -48,6 +56,36 @@ namespace :scraper do
   desc "Destroy all posting data"
   task destroy_all_posts: :environment do
     Post.destroy_all
+  end
+  
+  desc "Save neighborhood codes in a reference table"
+  task scrape_neighborhoods: :environment do
+    require 'open-uri'
+    require 'json'
+  
+    auth_token = "a23f2c2436dfcac948390a3c5b5d4b33"
+    location_url = "http://reference.3taps.com/locations"
+  
+    params = {
+      auth_token: auth_token,
+      level: "locality",
+      state: "USA-IL"
+    }
+   
+    uri = URI.parse(location_url)
+    uri.query = URI.encode_www_form(params)
+ 
+    result = JSON.parse(open(uri).read)
+ 
+    #puts JSON.pretty_generate result
+    
+    result["locations"].each do |location|
+      @location = Location.new
+      @location.code = location["code"]
+      @location.name = location["short_name"]
+      @location.save
+    end
+    
   end
 
 end
